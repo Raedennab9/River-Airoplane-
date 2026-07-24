@@ -60,6 +60,7 @@ If PowerShell blocks activation, use the virtual-environment interpreter directl
 - Pause/resume: P
 - Restart after game over: R
 - Quit: Esc
+- Mobile/mouse: use the on-screen direction, FIRE, and pause buttons
 
 ## Optional assets
 

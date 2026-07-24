@@ -23,6 +23,15 @@ import pygame
 WIDTH, HEIGHT = 800, 600
 FPS = 60
 
+SCREEN_CONTROLS = {
+    "left": pygame.Rect(18, HEIGHT-94, 54, 54),
+    "right": pygame.Rect(130, HEIGHT-94, 54, 54),
+    "up": pygame.Rect(74, HEIGHT-150, 54, 54),
+    "down": pygame.Rect(74, HEIGHT-94, 54, 54),
+    "fire": pygame.Rect(WIDTH-108, HEIGHT-108, 88, 88),
+    "pause": pygame.Rect(WIDTH-66, 68, 48, 38),
+}
+
 # Speeds & timing (pixels/sec & seconds)
 PLAYER_SPEED = 300
 BULLET_SPEED = -720
@@ -347,9 +356,17 @@ class Player(pygame.sprite.Sprite):
         self.spread = False
         self.rapid = False
         self.power_timers = {"shield":0.0, "rapid":0.0, "spread":0.0}
-    def update(self, dt, keys):
-        vx = (keys[pygame.K_RIGHT] or keys[pygame.K_d]) - (keys[pygame.K_LEFT] or keys[pygame.K_a])
-        vy = (keys[pygame.K_DOWN]  or keys[pygame.K_s]) - (keys[pygame.K_UP]   or keys[pygame.K_w])
+    def update(self, dt, keys, screen_actions=()):
+        vx = (
+            keys[pygame.K_RIGHT] or keys[pygame.K_d] or "right" in screen_actions
+        ) - (
+            keys[pygame.K_LEFT] or keys[pygame.K_a] or "left" in screen_actions
+        )
+        vy = (
+            keys[pygame.K_DOWN] or keys[pygame.K_s] or "down" in screen_actions
+        ) - (
+            keys[pygame.K_UP] or keys[pygame.K_w] or "up" in screen_actions
+        )
         if vx and vy:
             vx *= math.sqrt(0.5)
             vy *= math.sqrt(0.5)
@@ -448,6 +465,7 @@ class Game:
         self.score = 0
         self.state = self.MENU
         self.shake = 0.0
+        self.pointer_actions = {}
 
     def enable_audio(self, feedback=False):
         global PUP_SND
@@ -469,6 +487,7 @@ class Game:
         self.spawn = SpawnManager()
         self.score = 0
         self.shake = 0.0
+        self.pointer_actions.clear()
         self.state = self.PLAY
 
     async def run(self):
@@ -484,10 +503,21 @@ class Game:
     def handle_events(self):
         for e in pygame.event.get():
             if e.type == pygame.QUIT: return False
-            if e.type in (pygame.KEYDOWN, pygame.MOUSEBUTTONDOWN):
+            if e.type in (pygame.KEYDOWN, pygame.MOUSEBUTTONDOWN, pygame.FINGERDOWN):
                 self.enable_audio(feedback=self.state == self.MENU)
-            if e.type == pygame.MOUSEBUTTONDOWN and self.state == self.MENU:
-                self.state = self.PLAY
+            if e.type == pygame.MOUSEBUTTONDOWN and e.button == 1 and not getattr(e, "touch", False):
+                self.pointer_down("mouse", e.pos)
+            elif e.type == pygame.MOUSEMOTION and not getattr(e, "touch", False):
+                if e.buttons[0]:
+                    self.pointer_move("mouse", e.pos)
+            elif e.type == pygame.MOUSEBUTTONUP and e.button == 1 and not getattr(e, "touch", False):
+                self.pointer_up("mouse")
+            elif e.type == pygame.FINGERDOWN:
+                self.pointer_down(e.finger_id, (e.x*WIDTH, e.y*HEIGHT))
+            elif e.type == pygame.FINGERMOTION:
+                self.pointer_move(e.finger_id, (e.x*WIDTH, e.y*HEIGHT))
+            elif e.type == pygame.FINGERUP:
+                self.pointer_up(e.finger_id)
             if e.type == pygame.KEYDOWN:
                 if e.key == pygame.K_ESCAPE: return False
                 if self.state == self.MENU and e.key == pygame.K_RETURN:
@@ -499,6 +529,36 @@ class Game:
                 elif self.state == self.PAUSE and e.key == pygame.K_p:
                     self.state = self.PLAY
         return True
+
+    def action_at(self, pos):
+        for action, rect in SCREEN_CONTROLS.items():
+            if rect.collidepoint(pos):
+                return action
+        return None
+
+    def pointer_down(self, pointer_id, pos):
+        if self.state == self.MENU:
+            self.state = self.PLAY
+            return
+        if self.state == self.GAMEOVER:
+            self.reset()
+            return
+        action = self.action_at(pos)
+        if action == "pause":
+            self.state = self.PAUSE if self.state == self.PLAY else self.PLAY
+            return
+        if action:
+            self.pointer_actions[pointer_id] = action
+
+    def pointer_move(self, pointer_id, pos):
+        action = self.action_at(pos)
+        if action and action != "pause":
+            self.pointer_actions[pointer_id] = action
+        else:
+            self.pointer_actions.pop(pointer_id, None)
+
+    def pointer_up(self, pointer_id):
+        self.pointer_actions.pop(pointer_id, None)
 
     def fire_player_weapon(self):
         shots = self.player.shoot()
@@ -524,8 +584,9 @@ class Game:
         self.bg.update(dt); self.clouds1.update(dt); self.clouds2.update(dt)
         # player
         keys = pygame.key.get_pressed()
-        self.player.update(dt, keys)
-        if keys[pygame.K_SPACE]:
+        screen_actions = set(self.pointer_actions.values())
+        self.player.update(dt, keys, screen_actions)
+        if keys[pygame.K_SPACE] or "fire" in screen_actions:
             self.fire_player_weapon()
         # spawn logic
         self.spawn.update(dt)
@@ -594,7 +655,7 @@ class Game:
         self.draw_text(surf, f"Score: {self.score}", 24, 10, 10)
         audio_label = "Audio: ON" if self.audio_ready else "Audio: click or press a key"
         audio_color = UI_GREEN if self.audio_ready else UI_YELLOW
-        self.draw_text(surf, audio_label, 14, 10, HEIGHT-24, color=audio_color)
+        self.draw_text(surf, audio_label, 14, 10, 62, color=audio_color)
         # hearts
         x0 = 10; y0 = 40
         for i in range(PLAYER_MAX_HP):
@@ -618,6 +679,26 @@ class Game:
         rend = font.render(text, True, color)
         surf.blit(rend, rend.get_rect(topleft=(x,y)))
 
+    def draw_screen_controls(self, surf):
+        active = set(self.pointer_actions.values())
+        labels = {
+            "left": "L",
+            "right": "R",
+            "up": "UP",
+            "down": "DN",
+            "fire": "FIRE",
+            "pause": "II",
+        }
+        font = pygame.font.SysFont("segoeui", 18, bold=True)
+        for action, rect in SCREEN_CONTROLS.items():
+            button = pygame.Surface(rect.size, pygame.SRCALPHA)
+            fill = (40, 170, 225, 205) if action in active else (18, 28, 42, 145)
+            pygame.draw.rect(button, fill, button.get_rect(), border_radius=14)
+            pygame.draw.rect(button, (235, 245, 255, 210), button.get_rect(), 2, border_radius=14)
+            text = font.render(labels[action], True, (255, 255, 255))
+            button.blit(text, text.get_rect(center=button.get_rect().center))
+            surf.blit(button, rect)
+
     def draw(self):
         # render to a world surface for shake
         world = pygame.Surface((WIDTH, HEIGHT))
@@ -635,19 +716,21 @@ class Game:
         oy = int(random.uniform(-self.shake, self.shake)) if self.shake>0 else 0
         self.screen.fill((0, 0, 0))
         self.screen.blit(world, (ox, oy))
+        if self.state in (self.PLAY, self.PAUSE):
+            self.draw_screen_controls(self.screen)
 
         # overlays for menu/pause/gameover
         if self.state == self.MENU:
             self.draw_centered("AIR COMBAT: RIVER RUN", 48, 0, -40)
-            self.draw_centered("Press ENTER to start", 28, 0, 10)
-            self.draw_centered("Move: WASD/Arrows • Shoot: Space • Pause: P • Quit: Esc", 20, 0, 44)
+            self.draw_centered("Press ENTER or tap to start", 28, 0, 10)
+            self.draw_centered("Keyboard, mouse, and multi-touch controls supported", 20, 0, 44)
         elif self.state == self.PAUSE:
             self.draw_centered("PAUSED", 48, 0, -10)
             self.draw_centered("Press P to resume", 24, 0, 28)
         elif self.state == self.GAMEOVER:
             self.draw_centered("MISSION FAILED", 48, 0, -20)
             self.draw_centered(f"Final Score: {self.score}", 30, 0, 20)
-            self.draw_centered("Press R to restart or Esc to quit", 22, 0, 50)
+            self.draw_centered("Press R or tap to restart • Esc quits", 22, 0, 50)
 
         pygame.display.flip()
 
