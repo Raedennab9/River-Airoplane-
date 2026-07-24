@@ -39,6 +39,14 @@ jobs:
           --title "Air Combat: River Run"
           .
 
+      - name: Version browser package
+        shell: bash
+        run: |
+          package="$(find build/web -maxdepth 1 -name '*.apk' -print -quit)"
+          versioned="river-airoplane-${GITHUB_SHA}.apk"
+          mv "$package" "build/web/$versioned"
+          sed -i "s|$(basename "$package")|$versioned|g" build/web/index.html
+
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
 
