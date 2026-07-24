@@ -52,7 +52,8 @@ asset is absent.
 
 - `player.png` — approximately 64×52, top-down jet
 - `enemy.png` — approximately 56×44, helicopter
-- `shot.wav`, `explosion.wav`, `powerup.wav`, `hit.wav`
+- Desktop: `shot.wav`, `explosion.wav`, `powerup.wav`, `hit.wav`
+- Browser: matching compressed `.ogg` versions of those effects
 - `music.ogg`
 
 ## Packaging

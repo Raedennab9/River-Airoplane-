@@ -78,6 +78,8 @@ def load_image(name: str, size=None) -> Optional[pygame.Surface]:
 
 def load_sound(name: str) -> Optional[pygame.mixer.Sound]:
     p = ASSETS_DIR / name
+    if sys.platform == "emscripten":
+        p = p.with_suffix(".ogg")
     if not p.exists(): return None
     try:
         return pygame.mixer.Sound(str(p))
