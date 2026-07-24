@@ -18,6 +18,22 @@ A 2-D Pygame shooter featuring:
 The browser edition is packaged with Pygbag and deployed automatically through
 GitHub Pages whenever `main` is updated.
 
+## Run with Streamlit
+
+The Streamlit app embeds the browser edition while preserving keyboard controls,
+sound, and fullscreen permission.
+
+```powershell
+pip install -r requirements.txt
+streamlit run streamlit_app.py
+```
+
+To publish it on Streamlit Community Cloud, select:
+
+- Repository: `Raedennab9/River-Airoplane-`
+- Branch: `main`
+- App file: `streamlit_app.py`
+
 ## Quick start (Windows)
 
 Python 3.12 or newer is recommended.
