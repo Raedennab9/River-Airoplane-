@@ -78,8 +78,9 @@ def load_image(name: str, size=None) -> Optional[pygame.Surface]:
 
 def load_sound(name: str) -> Optional[pygame.mixer.Sound]:
     p = ASSETS_DIR / name
-    if sys.platform == "emscripten":
-        p = p.with_suffix(".ogg")
+    compressed = p.with_suffix(".ogg")
+    if sys.platform == "emscripten" or (not p.exists() and compressed.exists()):
+        p = compressed
     if not p.exists(): return None
     try:
         return pygame.mixer.Sound(str(p))
@@ -207,6 +208,24 @@ SHOT_SND = None
 EXPLO_SND = None
 PUP_SND = None
 HIT_SND = None
+
+def initialize_audio() -> bool:
+    """Initialize the mixer and load effects after browser audio is unlocked."""
+    global SHOT_SND, EXPLO_SND, PUP_SND, HIT_SND
+    try:
+        if pygame.mixer.get_init() is None:
+            pygame.mixer.init(44100, -16, 2, 512)
+        SHOT_SND = load_sound("shot.wav")
+        EXPLO_SND = load_sound("explosion.wav")
+        PUP_SND = load_sound("powerup.wav")
+        HIT_SND = load_sound("hit.wav")
+        for sound in (SHOT_SND, EXPLO_SND, PUP_SND, HIT_SND):
+            if sound:
+                sound.set_volume(0.8)
+        return any((SHOT_SND, EXPLO_SND, PUP_SND, HIT_SND))
+    except pygame.error:
+        SHOT_SND = EXPLO_SND = PUP_SND = HIT_SND = None
+        return False
 
 # ------------ Entities ------------
 class Particle(pygame.sprite.Sprite):
@@ -401,14 +420,10 @@ class Game:
         pygame.display.set_caption("Air Combat: River Run — Advanced")
         self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
         self.clock = pygame.time.Clock()
-        # sounds (optional)
-        global SHOT_SND, EXPLO_SND, PUP_SND, HIT_SND
-        SHOT_SND = load_sound("shot.wav")
-        EXPLO_SND = load_sound("explosion.wav")
-        PUP_SND  = load_sound("powerup.wav")
-        HIT_SND  = load_sound("hit.wav")
+        # Browsers may reject mixer initialization until the first user input.
+        self.audio_ready = initialize_audio() if sys.platform != "emscripten" else False
         music = ASSETS_DIR / "music.ogg"
-        if music.exists():
+        if self.audio_ready and music.exists():
             try:
                 pygame.mixer.music.load(str(music))
                 pygame.mixer.music.set_volume(0.5)
@@ -433,6 +448,14 @@ class Game:
         self.score = 0
         self.state = self.MENU
         self.shake = 0.0
+
+    def enable_audio(self, feedback=False):
+        global PUP_SND
+        was_ready = self.audio_ready
+        if not self.audio_ready:
+            self.audio_ready = initialize_audio()
+        if feedback and not was_ready and self.audio_ready and PUP_SND:
+            PUP_SND.play()
 
     def reset(self):
         self.all.empty()
@@ -461,6 +484,10 @@ class Game:
     def handle_events(self):
         for e in pygame.event.get():
             if e.type == pygame.QUIT: return False
+            if e.type in (pygame.KEYDOWN, pygame.MOUSEBUTTONDOWN):
+                self.enable_audio(feedback=self.state == self.MENU)
+            if e.type == pygame.MOUSEBUTTONDOWN and self.state == self.MENU:
+                self.state = self.PLAY
             if e.type == pygame.KEYDOWN:
                 if e.key == pygame.K_ESCAPE: return False
                 if self.state == self.MENU and e.key == pygame.K_RETURN:
@@ -565,6 +592,9 @@ class Game:
     def draw_ui(self, surf):
         # score
         self.draw_text(surf, f"Score: {self.score}", 24, 10, 10)
+        audio_label = "Audio: ON" if self.audio_ready else "Audio: click or press a key"
+        audio_color = UI_GREEN if self.audio_ready else UI_YELLOW
+        self.draw_text(surf, audio_label, 14, 10, HEIGHT-24, color=audio_color)
         # hearts
         x0 = 10; y0 = 40
         for i in range(PLAYER_MAX_HP):
@@ -583,9 +613,9 @@ class Game:
             pygame.draw.rect(surf, color, (x,y,int(w*frac), h), border_radius=2)
         self.draw_text(surf, label, 14, x-58, y-2)
 
-    def draw_text(self, surf, text, size, x, y):
+    def draw_text(self, surf, text, size, x, y, color=SKY_TEXT):
         font = pygame.font.SysFont('segoeui', size, bold=True)
-        rend = font.render(text, True, SKY_TEXT)
+        rend = font.render(text, True, color)
         surf.blit(rend, rend.get_rect(topleft=(x,y)))
 
     def draw(self):
