@@ -13,6 +13,7 @@ Controls:
 - Restart (Game Over): R
 """
 from __future__ import annotations
+import asyncio
 import math, random, sys
 from pathlib import Path
 from typing import Tuple, Optional
@@ -445,13 +446,15 @@ class Game:
         self.shake = 0.0
         self.state = self.PLAY
 
-    def run(self):
+    async def run(self):
         while True:
             dt = min(self.clock.tick(FPS)/1000.0, 0.05)
             if not self.handle_events(): return
             if self.state == self.PLAY:
                 self.update(dt)
             self.draw()
+            # Yield to the browser event loop when packaged with Pygbag.
+            await asyncio.sleep(0)
 
     def handle_events(self):
         for e in pygame.event.get():
@@ -622,8 +625,8 @@ class Game:
         rect = rend.get_rect(center=(WIDTH//2 + dx, HEIGHT//2 + dy))
         self.screen.blit(rend, rect)
 
-def main():
-    Game().run()
+async def main():
+    await Game().run()
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

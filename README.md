@@ -11,6 +11,13 @@ A 2-D Pygame shooter featuring:
 - Helicopters, boats, strafers, and enemy projectiles
 - Optional image, sound, and music assets
 
+## Play online
+
+[Play Air Combat: River Run in your browser](https://raedennab9.github.io/River-Airoplane-/)
+
+The browser edition is packaged with Pygbag and deployed automatically through
+GitHub Pages whenever `main` is updated.
+
 ## Quick start (Windows)
 
 Python 3.12 or newer is recommended.
